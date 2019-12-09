@@ -10,6 +10,11 @@ __maintainer__ = __author__
 __email__ = 'libor.gabaj@gmail.com'
 
 
+# Standard library modules
+import logging
+# import abc
+
+
 ###############################################################################
 # Enumeration and parameter classes
 ###############################################################################
@@ -86,3 +91,84 @@ def command_index(token):
             index = i
             break
     return index
+
+
+###############################################################################
+# IoT core
+###############################################################################
+class IoTcore(object):
+    """General processing for IoT devices."""
+
+    def __init__(self):
+        """Create the class instance - constructor."""
+        # Logging
+        self._logger = logging.getLogger(' '.join([__name__, __version__]))
+        self._logger.debug(
+            'Instance of %s created: %s',
+            self.__class__.__name__, str(self)
+        )
+
+    def __str__(self):
+        """Represent instance object as a string."""
+        msg = \
+            f'{self.__class__.__name__}()'
+        return msg
+
+    def __repr__(self):
+        """Represent instance object officially."""
+        msg = \
+            f'{self.__class__.__name__}()'
+        return msg
+
+    @property
+    def value_min(self):
+        """Minimal acceptable value."""
+        return self._value_min
+
+    @value_min.setter
+    def value_min(self, value):
+        """Set minimal acceptable value."""
+        try:
+            self._value_min = float(value)
+        except (TypeError, ValueError):
+            self._value_min = None
+
+    @property
+    def value_max(self):
+        """Maximal acceptable value."""
+        return self._value_max
+
+    @value_max.setter
+    def value_max(self, value):
+        """Set maximal acceptable value."""
+        try:
+            self._value_max = float(value)
+        except (TypeError, ValueError):
+            self._value_max = None
+
+    def filter(self, value):
+        """Filter value against acceptable value range.
+
+        Arguments
+        ---------
+        value : float
+            Value to be filtered.
+
+        Returns
+        -------
+        float | None
+            If the input value is outside of the acceptable value range, None
+            is returned, otherwise that value.
+
+        """
+        if value is None:
+            return
+        if self.value_max is not None and value > self.value_max:
+            self._logger.warning('Rejected value %f greater than %f',
+                                 value, self.value_max)
+            return
+        if self.value_min is not None and value < self.value_min:
+            self._logger.warning('Rejected value %f less than %f',
+                                 value, self.value_min)
+            return
+        return value
