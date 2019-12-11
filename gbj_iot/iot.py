@@ -12,7 +12,7 @@ __email__ = 'libor.gabaj@gmail.com'
 
 # Standard library modules
 import logging
-# import abc
+from abc import ABC, abstractmethod
 
 
 ###############################################################################
@@ -96,7 +96,7 @@ def command_index(token):
 ###############################################################################
 # IoT core
 ###############################################################################
-class IoTcore(object):
+class Plugin(object):
     """General processing for IoT devices."""
 
     def __init__(self):
@@ -121,54 +121,7 @@ class IoTcore(object):
         return msg
 
     @property
-    def value_min(self):
-        """Minimal acceptable value."""
-        return self._value_min
-
-    @value_min.setter
-    def value_min(self, value):
-        """Set minimal acceptable value."""
-        try:
-            self._value_min = float(value)
-        except (TypeError, ValueError):
-            self._value_min = None
-
-    @property
-    def value_max(self):
-        """Maximal acceptable value."""
-        return self._value_max
-
-    @value_max.setter
-    def value_max(self, value):
-        """Set maximal acceptable value."""
-        try:
-            self._value_max = float(value)
-        except (TypeError, ValueError):
-            self._value_max = None
-
-    def filter(self, value):
-        """Filter value against acceptable value range.
-
-        Arguments
-        ---------
-        value : float
-            Value to be filtered.
-
-        Returns
-        -------
-        float | None
-            If the input value is outside of the acceptable value range, None
-            is returned, otherwise that value.
-
-        """
-        if value is None:
-            return
-        if self.value_max is not None and value > self.value_max:
-            self._logger.warning('Rejected value %f greater than %f',
-                                 value, self.value_max)
-            return
-        if self.value_min is not None and value < self.value_min:
-            self._logger.warning('Rejected value %f less than %f',
-                                 value, self.value_min)
-            return
-        return value
+    @abstractmethod
+    def id(self):
+        """Identifier of the pluging and the root MQTT topic fragment."""
+        ...
