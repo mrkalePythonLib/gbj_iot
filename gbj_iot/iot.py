@@ -13,6 +13,7 @@ __email__ = 'libor.gabaj@gmail.com'
 # Standard library modules
 import logging
 from abc import ABC, abstractmethod
+from enum import Enum
 
 
 ###############################################################################
@@ -23,7 +24,7 @@ class Status:
 
     (
         ONLINE, OFFLINE, ACTIVE, IDLE,
-    ) = range(4)
+    ) = ('Online', 'Offline', 'Active', 'Idle')
 
 
 class Command:
@@ -31,66 +32,14 @@ class Command:
 
     (
         STATUS, RESET, ON, OFF, TOGGLE,
-    ) = range(5)
+    ) = ('STATUS', 'RESET', 'ON', 'OFF', 'TOGGLE')
 
 
-# Mapping status and command codes to tokens
-status_map = []
-command_map = []
-
-# Status codes
-status_map.insert(Status.ONLINE, 'Online')  # Connected for LWT topic
-status_map.insert(Status.OFFLINE, 'Offline')  # Disconnected for LWT topic
-status_map.insert(Status.ACTIVE, 'Active')
-status_map.insert(Status.IDLE, 'Idle')
-
-# Commands
-command_map.insert(Command.STATUS, 'STATUS')  # Requesting status data
-command_map.insert(Command.RESET, 'RESET')  # Requesting reset of parameters
-command_map.insert(Command.ON, 'ON')
-command_map.insert(Command.OFF, 'OFF')
-command_map.insert(Command.TOGGLE, 'TOGGLE')
-
-
-# -------------------------------------------------------------------------
-# Getters
-# -------------------------------------------------------------------------
-def status_token(index):
-    """Return token value for token index."""
-    try:
-        token = status_map[index]
-    except Exception:
-        token = None
-    return token
-
-
-def status_index(token):
-    """Return token index for token value."""
-    index = None
-    for i, t in enumerate(status_map):
-        if t == token:
-            index = i
-            break
-    return index
-
-
-def command_token(index):
-    """Return token value for token index."""
-    try:
-        token = command_map[index]
-    except Exception:
-        token = None
-    return token
-
-
-def command_index(token):
-    """Return token index for token value."""
-    index = None
-    for i, t in enumerate(command_map):
-        if t == token:
-            index = i
-            break
-    return index
+class Category(Enum):
+    """Enumeration of possible MQTT topic parameters."""
+    STATUS = 'state'
+    COMMAND = 'cmd'
+    DATA = 'data'
 
 
 ###############################################################################
@@ -99,14 +48,14 @@ def command_index(token):
 class Plugin(object):
     """General processing for IoT devices."""
 
+    # Predefined configuration file sections related to MQTT
+    TOPIC_SEP = '/'
+    """str: MQTT topic items separator."""
+
     def __init__(self):
         """Create the class instance - constructor."""
         # Logging
         self._logger = logging.getLogger(' '.join([__name__, __version__]))
-        self._logger.debug(
-            'Instance of %s created: %s',
-            self.__class__.__name__, str(self)
-        )
 
     def __str__(self):
         """Represent instance object as a string."""
@@ -124,4 +73,85 @@ class Plugin(object):
     @abstractmethod
     def id(self):
         """Identifier of the pluging and the root MQTT topic fragment."""
+        ...
+
+    @property
+    def logger(self):
+        """Logger dedicated for the plugin."""
+        return self._logger
+
+    @property
+    def mqtt_client(self):
+        """MQTT client created by a main application."""
+        return self._mqtt_client
+
+    @mqtt_client.setter
+    def mqtt_client(self, client: object):
+        """Inject MQTT client for publishing purposes."""
+        self._mqtt_client = client
+
+    def check_category(self, category: Category) -> str:
+        """Check validity of the  enumeration member and return its value."""
+        try:
+            if isinstance(category, Category):
+                category = category.value
+            else:
+                category = Category[category].value
+            return category
+        except KeyError:
+            errmsg = f'Unknown MQTT topic {category=}'
+            self._logger.error(errmsg)
+            raise Exception(errmsg)
+
+    def get_topic(
+        self,
+        category: Category,
+        parameter: str = None,
+        measure: str = None) -> str:
+        """Compose MQTT topic name from prescribed topic parts.
+
+        Arguments
+        ---------
+        category
+            Enumerated category of a MQTT topic.
+        parameter
+            Optional and arbitrary name of a parameter, which values is
+            transmitted by the MQTT topic. It is usually a name of a physical
+            unit or an operational parameter.
+        measure
+            Optional and arbitrary name of an aspect related to tranmitted
+            value. It is usually a statistical measure like minimum, maximum,
+            current value, etc.
+
+        Returns
+        -------
+        str
+            MQTT topic name or None in case of failure.
+
+
+        """
+        topic = [self.id]
+        topic.append(self.check_category(category))
+        # Optional topic parts
+        if parameter:
+            topic.append(parameter)
+        if measure:
+            topic.append(measure)
+        # Compose topic
+        topic_name = self.TOPIC_SEP.join(topic)
+        return topic_name
+
+    def begin(self):
+        """Actions at starting IoT application."""
+        self._logger.debug(f'Plugin "{self.id}" started')
+
+    def finish(self):
+        """Actions at finishing IoT application."""
+        self._logger.debug(f'Plugin "{self.id}" stopped')
+
+    @abstractmethod
+    def publish_status(self):
+        """Publish to all MQTT topics with potential parameters and measures
+        typical for the plugin.
+        """
         ...
