@@ -54,6 +54,7 @@ class Plugin(object):
 
     def __init__(self):
         """Create the class instance - constructor."""
+        self.mqtt_client = None
         # Logging
         self._logger = logging.getLogger(' '.join([__name__, __version__]))
 
@@ -75,23 +76,20 @@ class Plugin(object):
         """Identifier of the pluging and the root MQTT topic fragment."""
         ...
 
-    @property
-    def logger(self):
-        """Logger dedicated for the plugin."""
-        return self._logger
-
-    @property
-    def mqtt_client(self):
-        """MQTT client created by a main application."""
-        return self._mqtt_client
-
-    @mqtt_client.setter
-    def mqtt_client(self, client: object):
-        """Inject MQTT client for publishing purposes."""
-        self._mqtt_client = client
-
     def check_category(self, category: Category) -> str:
-        """Check validity of the  enumeration member and return its value."""
+        """Check validity of the category enumeration member and return
+        its value.
+
+        Returns
+        -------
+            Category name for MQTT topic.
+
+        Raises
+        -------
+        ValueError
+            Input string is not an enumeration key.
+
+        """
         try:
             if isinstance(category, Category):
                 category = category.value
@@ -101,7 +99,7 @@ class Plugin(object):
         except KeyError:
             errmsg = f'Unknown MQTT topic {category=}'
             self._logger.error(errmsg)
-            raise Exception(errmsg)
+            raise ValueError(errmsg)
 
     def get_topic(
         self,
@@ -125,9 +123,7 @@ class Plugin(object):
 
         Returns
         -------
-        str
             MQTT topic name or None in case of failure.
-
 
         """
         topic = [self.id]
