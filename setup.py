@@ -15,7 +15,7 @@ setup(
     'Programming Language :: Python :: 3.8',
     'Topic :: System :: Hardware',
   ],
-  keywords='common, system, fan',
+  keywords='iot',
   url='http://github.com/mrkalePythonLib/gbj_iot',
   author='Libor Gabaj',
   author_email='libor.gabaj@gmail.com',

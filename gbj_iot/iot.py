@@ -54,6 +54,8 @@ class Measure(Enum):
     MINIMUM = 'min'
     MAXIMUM = 'max'
     AVERAGE = 'avg'
+    PERCENTILE = 'ptl'
+    PERCENTAGE = 'perc'
 
 
 ###############################################################################
@@ -195,10 +197,6 @@ class Plugin(ABC):
             value. It is usually a statistical measure like minimum, maximum,
             current value, etc.
 
-        Returns
-        -------
-            MQTT topic name or None in case of failure.
-
         """
         topic = [self.id]
         topic.append(self.check_category(category))
@@ -210,6 +208,13 @@ class Plugin(ABC):
         # Compose topic
         topic_name = self.TOPIC_SEP.join(topic)
         return topic_name
+
+    @property
+    def device_topic(self) -> str:
+        """Compose MQTT topic name for device identifier."""
+        topic = [self.id]
+        topic.append('#')
+        return self.TOPIC_SEP.join(topic)
 
     @abstractmethod
     def begin(self):
@@ -316,3 +321,29 @@ class Plugin(ABC):
             self._params.append(param)
         except Exception as errmsg:
             self._logger.error(errmsg)
+
+    @abstractmethod
+    def process_command(self,
+                        payload: str,
+                        parameter: str,
+                        measure: str):
+        """Process command for this device."""
+        ...
+
+    @abstractmethod
+    def process_status(self,
+                       device_id: str,
+                       payload: str,
+                       parameter: str,
+                       measure: str):
+        """Process status of any device except this one."""
+        ...
+
+    @abstractmethod
+    def process_data(self,
+                     device_id: str,
+                     payload: str,
+                     parameter: str,
+                     measure: str):
+        """Process data from any device except this one."""
+        ...
