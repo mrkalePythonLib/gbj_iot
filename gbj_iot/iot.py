@@ -15,7 +15,7 @@ import logging
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from dataclasses import dataclass
-
+from typing import Optional, Any, NoReturn
 
 ###############################################################################
 # Enumeration and parameter classes
@@ -66,7 +66,7 @@ class PluginParam:
     """Plugin parameter record definition."""
     parameter: str
     measure: Measure = None
-    value: any = None
+    value: Any = None
 
 
 class Plugin(ABC):
@@ -76,7 +76,7 @@ class Plugin(ABC):
     TOPIC_SEP = '/'
     """str: MQTT topic items separator."""
 
-    def __init__(self):
+    def __init__(self) -> NoReturn:
         """Create the class instance - constructor."""
         self.mqtt_client = None
         # Private attributes
@@ -84,13 +84,13 @@ class Plugin(ABC):
         # Logging
         self._logger = logging.getLogger(' '.join([__name__, __version__]))
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Represent instance object as a string."""
         msg = \
             f'{self.__class__.__name__}()'
         return msg
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Represent instance object officially."""
         msg = \
             f'{self.__class__.__name__}()'
@@ -98,7 +98,7 @@ class Plugin(ABC):
 
     @property
     @abstractmethod
-    def id(self):
+    def id(self) -> str:
         """Identifier of the pluging and the root MQTT topic fragment."""
         ...
 
@@ -217,17 +217,17 @@ class Plugin(ABC):
         return self.TOPIC_SEP.join(topic)
 
     @abstractmethod
-    def begin(self):
+    def begin(self) -> NoReturn:
         """Actions at starting IoT application."""
         self._logger.debug(f'Plugin "{self.id}" started')
 
     @abstractmethod
-    def finish(self):
+    def finish(self) -> NoReturn:
         """Actions at finishing IoT application."""
         self._logger.debug(f'Plugin "{self.id}" stopped')
 
     @abstractmethod
-    def publish_status(self):
+    def publish_status(self) -> NoReturn:
         """Publish to all MQTT topics with potential parameters and measures
         typical for the plugin.
         """
@@ -266,7 +266,7 @@ class Plugin(ABC):
                 return index
         raise ValueError
 
-    def get_param(self, parameter: Parameter, measure: Measure) -> any:
+    def get_param(self, parameter: Parameter, measure: Measure) -> Any:
         """Get parameter value from the device's parameters list.
 
         Arguments
@@ -295,7 +295,10 @@ class Plugin(ABC):
             result = self._params[index].value
         return result
 
-    def set_param(self, value: any, parameter: Parameter, measure: Measure):
+    def set_param(self,
+                  value: Any,
+                  parameter: Parameter,
+                  measure: Measure) -> NoReturn:
         """Set or update parameter with given value.
 
         Arguments
@@ -324,26 +327,26 @@ class Plugin(ABC):
 
     @abstractmethod
     def process_command(self,
-                        payload: str,
+                        value: str,
                         parameter: str,
-                        measure: str):
+                        measure: Optional[str]) -> NoReturn:
         """Process command for this device."""
         ...
 
     @abstractmethod
     def process_status(self,
-                       device_id: str,
-                       payload: str,
+                       value: str,
                        parameter: str,
-                       measure: str):
+                       measure: Optional[str],
+                       device: object) -> NoReturn:
         """Process status of any device except this one."""
         ...
 
     @abstractmethod
     def process_data(self,
-                     device_id: str,
-                     payload: str,
+                     value: str,
                      parameter: str,
-                     measure: str):
+                     measure: Optional[str],
+                     device: object) -> NoReturn:
         """Process data from any device except this one."""
         ...
