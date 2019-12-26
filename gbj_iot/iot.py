@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""Module for common constants, function, and classes for the IoT."""
+"""Module with common functionalities of plugins.
+
+"""
 __version__ = '0.1.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
 __copyright__ = 'Copyright 2019, ' + __author__
-__credits__ = []
+__credits__ = [__author__]
 __license__ = 'MIT'
 __maintainer__ = __author__
 __email__ = 'libor.gabaj@gmail.com'
@@ -15,25 +17,27 @@ import logging
 from abc import ABC, abstractmethod
 from enum import Enum, auto
 from dataclasses import dataclass
-from typing import Optional, Any, NoReturn
+from typing import Optional, Any, NoReturn, List
+
 
 ###############################################################################
 # Enumeration and parameter classes
 ###############################################################################
-class Status:
+class Status(Enum):
     """Enumeration of possible status tokens for MQTT topics."""
+    ONLINE = 'Online'
+    OFFLINE = 'Offline'
+    ACTIVE = 'Active'
+    IDLE = 'Idle'
 
-    (
-        ONLINE, OFFLINE, ACTIVE, IDLE,
-    ) = ('Online', 'Offline', 'Active', 'Idle')
 
-
-class Command:
+class Command(Enum):
     """Enumeration of possible commands tokens for MQTT topics."""
-
-    (
-        STATUS, RESET, ON, OFF, TOGGLE,
-    ) = ('STATUS', 'RESET', 'ON', 'OFF', 'TOGGLE')
+    GET_STATUS = 'STATUS'
+    RESET = 'RESET'
+    TURN_ON = 'ON'
+    TURN_OFF = 'OFF'
+    TOGGLE = 'TOGGLE'
 
 
 class Category(Enum):
@@ -47,10 +51,10 @@ class Parameter(Enum):
     """Enumeration of expected MQTT topic parameters."""
     ...
 
-
 class Measure(Enum):
     """Enumeration of possible MQTT topi measures."""
     VALUE = 'val'
+    DEFAULT = 'def'
     MINIMUM = 'min'
     MAXIMUM = 'max'
     AVERAGE = 'avg'
@@ -62,9 +66,9 @@ class Measure(Enum):
 # IoT core
 ###############################################################################
 @dataclass
-class PluginParam:
+class PluginData:
     """Plugin parameter record definition."""
-    parameter: str
+    parameter: Parameter = None
     measure: Measure = None
     value: Any = None
 
@@ -72,15 +76,15 @@ class PluginParam:
 class Plugin(ABC):
     """General processing for IoT devices."""
 
-    # Predefined configuration file sections related to MQTT
-    TOPIC_SEP = '/'
-    """str: MQTT topic items separator."""
+    class Separator(Enum):
+        TOPIC = '/'
 
     def __init__(self) -> NoReturn:
         """Create the class instance - constructor."""
         self.mqtt_client = None
         # Private attributes
-        self._params: [PluginParam] = []
+        self._params: [PluginData] = []  # Status (configuration) parameters
+        self._database: [PluginData] = []  # Data cache
         # Logging
         self._logger = logging.getLogger(' '.join([__name__, __version__]))
 
@@ -206,7 +210,7 @@ class Plugin(ABC):
         if measure:
             topic.append(self.check_measure(measure))
         # Compose topic
-        topic_name = self.TOPIC_SEP.join(topic)
+        topic_name = self.Separator.TOPIC.value.join(topic)
         return topic_name
 
     @property
@@ -214,7 +218,7 @@ class Plugin(ABC):
         """Compose MQTT topic name for device identifier."""
         topic = [self.id]
         topic.append('#')
-        return self.TOPIC_SEP.join(topic)
+        return self.Separator.TOPIC.value.join(topic)
 
     @abstractmethod
     def begin(self) -> NoReturn:
@@ -226,18 +230,10 @@ class Plugin(ABC):
         """Actions at finishing IoT application."""
         self._logger.debug(f'Plugin "{self.id}" stopped')
 
-    @abstractmethod
-    def publish_status(self) -> NoReturn:
-        """Publish to all MQTT topics with potential parameters and measures
-        typical for the plugin.
-        """
-        ...
-
-###############################################################################
-# Parameters actions
-###############################################################################
-    def _find_param(self, parameter: Parameter, measure: Measure) -> int:
-        """Find parameter in the device's parameters list.
+    def publish_param(self,
+                      parameter: Parameter,
+                      measure: Optional[Measure]) -> NoReturn:
+        """Publish registered parameter to status MQTT topic.
 
         Arguments
         ---------
@@ -246,27 +242,81 @@ class Plugin(ABC):
         measure
             Enumerated measure to be found.
 
+        """
+        try:
+            index = self._find_record(parameter, measure, self.params)
+        except ValueError:
+            return
+        record = self.params[index]
+        message = f'{record.value}'
+        topic = self.get_topic(
+            Category.STATUS,
+            record.parameter,
+            record.measure)
+        try:
+            self.mqtt_client.publish(message, topic)
+            msg = f'Published to MQTT {topic=}: {message}'
+            self._logger.debug(msg)
+        except Exception as errmsg:
+            self._logger.error(errmsg)
+
+    def publish_status(self) -> NoReturn:
+        """Publish all registered parameters to status MQTT topic."""
+        for record in self.params:
+            self.publish_param(record.parameter, record.measure)
+
+
+###############################################################################
+# Parameters and data actions
+###############################################################################
+    @property
+    def params(self) -> List[PluginData]:
+        """List of registered parameters."""
+        return self._params
+
+    @property
+    def database(self) -> List[PluginData]:
+        """List of cached data records."""
+        return self._database
+
+    def _find_record(self,
+                     parameter: Parameter,
+                     measure: Optional[Measure],
+                     dataset: List[PluginData]) -> int:
+        """Find record in the device's dataset.
+
+        Arguments
+        ---------
+        parameter
+            Enumerated parameter to be found.
+        measure
+            Enumerated measure to be found.
+        dataset
+            List of data records for searching in.
+
         Returns
         -------
-            Index of found parameter to the list of parameters.
+            Index of found record in the list of a dataset.
 
         Raises
         -------
         ValueError
-            Parameter not found or given unknown measure.
+            Record not found or given unknown measure.
 
         """
         if parameter is not None:
-            _ = self.check_parameter(parameter)
+            self.check_parameter(parameter)
         if measure is not None:
-            _ = self.check_measure(measure)
-        for index, param in enumerate(self._params):
-            if parameter == param.parameter \
-            and (measure is None or measure == param.measure):
+            self.check_measure(measure)
+        for index, record in enumerate(dataset):
+            if parameter == record.parameter \
+                    and (measure is None or measure == record.measure):
                 return index
         raise ValueError
 
-    def get_param(self, parameter: Parameter, measure: Measure) -> Any:
+    def get_param(self,
+                  parameter: Parameter,
+                  measure: Optional[Measure]) -> Any:
         """Get parameter value from the device's parameters list.
 
         Arguments
@@ -280,25 +330,19 @@ class Plugin(ABC):
         -------
             Value of a parameter or None.
 
-        Raises
-        -------
-        ValueError
-            Parameter not found or given unknown measure.
-
         """
-        result = None
         try:
-            index = self._find_param(parameter, measure)
-        except ValueError as errmsg:
-            self._logger.error(errmsg)
+            index = self._find_record(parameter, measure, self.params)
+        except ValueError:
+            result = None
         else:
-            result = self._params[index].value
+            result = self.params[index].value
         return result
 
     def set_param(self,
                   value: Any,
                   parameter: Parameter,
-                  measure: Measure) -> NoReturn:
+                  measure: Optional[Measure]) -> NoReturn:
         """Set or update parameter with given value.
 
         Arguments
@@ -310,42 +354,80 @@ class Plugin(ABC):
         measure
             Enumerated measure to be found.
 
-        Raises
+        """
+        try:
+            index = self._find_record(parameter, measure, self.params)
+            self.params[index].value = value
+        except ValueError:
+            record = PluginData(parameter, measure, value)
+            self.params.append(record)
+
+    def get_value(self,
+                  parameter: Parameter,
+                  measure: Optional[Measure]) -> Any:
+        """Get record value from the device's dataset.
+
+        Arguments
+        ---------
+        parameter
+            Enumerated parameter to be found.
+        measure
+            Enumerated measure to be found.
+
+        Returns
         -------
-        ValueError
-            Parameter not found or given unknown measure.
+            Value of a data record or None.
 
         """
         try:
-            index = self._find_param(parameter, measure)
-            self._params[index].value = value
+            index = self._find_record(parameter, measure, self.database)
         except ValueError:
-            param = PluginParam(parameter, measure, value)
-            self._params.append(param)
-        except Exception as errmsg:
-            self._logger.error(errmsg)
+            result = None
+        else:
+            result = self.database[index].value
+        return result
 
-    @abstractmethod
+    def set_value(self,
+                  value: Any,
+                  parameter: Parameter,
+                  measure: Optional[Measure]) -> NoReturn:
+        """Set or update record with given value.
+
+        Arguments
+        ---------
+        value
+            Value of a parameter to be saved or updated.
+        parameter
+            Enumerated parameter to be created or updated.
+        measure
+            Enumerated measure to be found.
+
+        """
+        try:
+            index = self._find_record(parameter, measure, self.database)
+            self.database[index].value = value
+        except ValueError:
+            record = PluginData(parameter, measure, value)
+            self.database.append(record)
+
     def process_command(self,
                         value: str,
-                        parameter: str,
+                        parameter:  Optional[str],
                         measure: Optional[str]) -> NoReturn:
         """Process command for this device."""
         ...
 
-    @abstractmethod
     def process_status(self,
                        value: str,
-                       parameter: str,
+                       parameter:  Optional[str],
                        measure: Optional[str],
                        device: object) -> NoReturn:
         """Process status of any device except this one."""
         ...
 
-    @abstractmethod
     def process_data(self,
                      value: str,
-                     parameter: str,
+                     parameter:  Optional[str],
                      measure: Optional[str],
                      device: object) -> NoReturn:
         """Process data from any device except this one."""
