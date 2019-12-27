@@ -87,6 +87,8 @@ class Plugin(ABC):
         self._database: [PluginData] = []  # Data cache
         # Logging
         self._logger = logging.getLogger(' '.join([__name__, __version__]))
+        self._logger.debug(
+            f'Instance of "{self.__class__.__name__}" created: {self.id}')
 
     def __str__(self) -> str:
         """Represent instance object as a string."""
