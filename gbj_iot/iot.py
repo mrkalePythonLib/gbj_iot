@@ -215,6 +215,41 @@ class Plugin(ABC):
         topic_name = self.Separator.TOPIC.value.join(topic)
         return topic_name
 
+    def get_log(
+        self,
+        message: str,
+        category: Category,
+        parameter: str = None,
+        measure: Measure = None) -> str:
+        """Compose log record as a substitution for MQTT topic and message.
+
+        Arguments
+        ---------
+        message
+            Value originally intended for publishing.
+        category
+            Enumerated category of a MQTT topic.
+        parameter
+            Optional and arbitrary name of a parameter, which values is
+            transmitted by the MQTT topic. It is usually a name of a physical
+            unit or an operational parameter.
+        measure
+            Optional enumerated measure of an aspect related to tranmitted
+            value. It is usually a statistical measure like minimum, maximum,
+            current value, etc.
+
+        """
+        category = category.name
+        log = f'{category}'
+        if parameter:
+            parameter = self.check_parameter(parameter)
+            log = f'{log}: {parameter=}'
+        if measure:
+            measure = self.check_measure(measure)
+            log = f'{log}, {measure=}'
+        log = f'{log}: {message}'
+        return log
+
     @property
     def device_topic(self) -> str:
         """Compose MQTT topic name for device identifier."""
@@ -255,12 +290,13 @@ class Plugin(ABC):
             Category.STATUS,
             record.parameter,
             record.measure)
-        try:
-            self.mqtt_client.publish(message, topic)
-            msg = f'Published to MQTT {topic=}: {message}'
-            self._logger.debug(msg)
-        except Exception as errmsg:
-            self._logger.error(errmsg)
+        msg = self.get_log(
+            message,
+            Category.STATUS,
+            record.parameter,
+            record.measure)
+        self._logger.debug(msg)
+        self.mqtt_client.publish(message, topic)
 
     def publish_status(self) -> NoReturn:
         """Publish all registered parameters to status MQTT topic."""
