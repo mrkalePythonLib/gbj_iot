@@ -5,7 +5,7 @@
 __version__ = '0.1.0'
 __status__ = 'Beta'
 __author__ = 'Libor Gabaj'
-__copyright__ = 'Copyright 2019, ' + __author__
+__copyright__ = 'Copyright 2019-2020, ' + __author__
 __credits__ = [__author__]
 __license__ = 'MIT'
 __maintainer__ = __author__
@@ -15,7 +15,7 @@ __email__ = 'libor.gabaj@gmail.com'
 # Standard library modules
 import logging
 from abc import ABC, abstractmethod
-from enum import Enum, auto
+from enum import Enum
 from dataclasses import dataclass
 from typing import Optional, Any, NoReturn, List
 
@@ -77,6 +77,7 @@ class Plugin(ABC):
     """General processing for IoT devices."""
 
     class Separator(Enum):
+        """Enumeration of separators in structural strings."""
         TOPIC = '/'
 
     def __init__(self) -> NoReturn:
@@ -86,9 +87,9 @@ class Plugin(ABC):
         self._params: [PluginData] = []  # Status (configuration) parameters
         self._database: [PluginData] = []  # Data cache
         # Logging
+        msg = f'Instance of "{self.__class__.__name__}" created: {self.id}'
         self._logger = logging.getLogger(' '.join([__name__, __version__]))
-        self._logger.debug(
-            f'Instance of "{self.__class__.__name__}" created: {self.id}')
+        self._logger.debug(msg)
 
     def __str__(self) -> str:
         """Represent instance object as a string."""
@@ -184,10 +185,10 @@ class Plugin(ABC):
             raise ValueError(errmsg)
 
     def get_topic(
-        self,
-        category: Category,
-        parameter: str = None,
-        measure: Measure = None) -> str:
+            self,
+            category: Category,
+            parameter: str = None,
+            measure: Measure = None) -> str:
         """Compose MQTT topic name from prescribed topic parts.
 
         Arguments
@@ -216,11 +217,11 @@ class Plugin(ABC):
         return topic_name
 
     def get_log(
-        self,
-        message: str,
-        category: Category,
-        parameter: str = None,
-        measure: Measure = None) -> str:
+            self,
+            message: str,
+            category: Category,
+            parameter: str = None,
+            measure: Measure = None) -> str:
         """Compose log record as a substitution for MQTT topic and message.
 
         Arguments
@@ -260,12 +261,14 @@ class Plugin(ABC):
     @abstractmethod
     def begin(self) -> NoReturn:
         """Actions at starting IoT application."""
-        self._logger.debug(f'Plugin "{self.id}" started')
+        msg = f'Plugin "{self.id}" started'
+        self._logger.debug(msg)
 
     @abstractmethod
     def finish(self) -> NoReturn:
         """Actions at finishing IoT application."""
-        self._logger.debug(f'Plugin "{self.id}" stopped')
+        msg = f'Plugin "{self.id}" stopped'
+        self._logger.debug(msg)
 
     def publish_param(self,
                       parameter: Parameter,
@@ -450,14 +453,14 @@ class Plugin(ABC):
 
     def process_command(self,
                         value: str,
-                        parameter:  Optional[str],
+                        parameter: Optional[str],
                         measure: Optional[str]) -> NoReturn:
         """Process command for this device."""
         ...
 
     def process_status(self,
                        value: str,
-                       parameter:  Optional[str],
+                       parameter: Optional[str],
                        measure: Optional[str],
                        device: object) -> NoReturn:
         """Process status of any device except this one."""
@@ -465,7 +468,7 @@ class Plugin(ABC):
 
     def process_data(self,
                      value: str,
-                     parameter:  Optional[str],
+                     parameter: Optional[str],
                      measure: Optional[str],
                      device: object) -> NoReturn:
         """Process data from any device except this one."""
