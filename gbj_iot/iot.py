@@ -29,6 +29,7 @@ class Status(Enum):
     OFFLINE = 'Offline'
     ACTIVE = 'Active'
     IDLE = 'Idle'
+    UNKNOWN = 'Uknown'
 
 
 class Command(Enum):
@@ -82,30 +83,27 @@ class Plugin(ABC):
 
     def __init__(self) -> NoReturn:
         """Create the class instance - constructor."""
-        self.mqtt_client = None
         # Private attributes
         self._params: [PluginData] = []  # Status (configuration) parameters
-        self._database: [PluginData] = []  # Data cache
+        # Device handlers
+        self.config = None  # Access to configuration INI file
+        self.mqtt_client = None  # Access to MQTT broker
         # Logging
-        msg = f'Instance of "{self.__class__.__name__}" created: {self.id}'
+        log = f'Instance of "{self.__class__.__name__}" created: {self.did}'
         self._logger = logging.getLogger(' '.join([__name__, __version__]))
-        self._logger.debug(msg)
+        self._logger.debug(log)
 
     def __str__(self) -> str:
         """Represent instance object as a string."""
-        msg = \
-            f'{self.__class__.__name__}()'
-        return msg
+        return f'{self.__class__.__name__}()'
 
     def __repr__(self) -> str:
         """Represent instance object officially."""
-        msg = \
-            f'{self.__class__.__name__}()'
-        return msg
+        return f'{self.__class__.__name__}()'
 
     @property
     @abstractmethod
-    def id(self) -> str:
+    def did(self) -> str:
         """Identifier of the pluging and the root MQTT topic fragment."""
         ...
 
@@ -130,9 +128,9 @@ class Plugin(ABC):
                 category = Category[category].value
             return category
         except KeyError:
-            errmsg = f'Unknown MQTT topic {category=}'
-            self._logger.error(errmsg)
-            raise ValueError(errmsg)
+            log = f'Unknown MQTT topic {category=}'
+            self._logger.error(log)
+            raise ValueError(log)
 
     def check_parameter(self, parameter: Parameter) -> str:
         """Check validity of the parameter enumeration member and return
@@ -155,9 +153,9 @@ class Plugin(ABC):
                 parameter = Parameter[parameter].value
             return parameter
         except KeyError:
-            errmsg = f'Unknown MQTT topic {parameter=}'
-            self._logger.error(errmsg)
-            raise ValueError(errmsg)
+            log = f'Unknown MQTT topic {parameter=}'
+            self._logger.error(log)
+            raise ValueError(log)
 
     def check_measure(self, measure: Measure) -> str:
         """Check validity of the measure enumeration member and return
@@ -180,14 +178,14 @@ class Plugin(ABC):
                 measure = Measure[measure].value
             return measure
         except KeyError:
-            errmsg = f'Unknown MQTT topic {measure=}'
-            self._logger.error(errmsg)
-            raise ValueError(errmsg)
+            log = f'Unknown MQTT topic {measure=}'
+            self._logger.error(log)
+            raise ValueError(log)
 
     def get_topic(
             self,
             category: Category,
-            parameter: str = None,
+            parameter: Parameter = None,
             measure: Measure = None) -> str:
         """Compose MQTT topic name from prescribed topic parts.
 
@@ -196,7 +194,7 @@ class Plugin(ABC):
         category
             Enumerated category of a MQTT topic.
         parameter
-            Optional and arbitrary name of a parameter, which values is
+            Optional enumerated parameter, which values is
             transmitted by the MQTT topic. It is usually a name of a physical
             unit or an operational parameter.
         measure
@@ -205,7 +203,7 @@ class Plugin(ABC):
             current value, etc.
 
         """
-        topic = [self.id]
+        topic = [self.did]
         topic.append(self.check_category(category))
         # Optional topic parts
         if parameter:
@@ -254,33 +252,32 @@ class Plugin(ABC):
     @property
     def device_topic(self) -> str:
         """Compose MQTT topic name for device identifier."""
-        topic = [self.id]
+        topic = [self.did]
         topic.append('#')
         return self.Separator.TOPIC.value.join(topic)
 
     @abstractmethod
     def begin(self) -> NoReturn:
         """Actions at starting IoT application."""
-        msg = f'Plugin "{self.id}" started'
-        self._logger.debug(msg)
+        log = f'Plugin "{self.did}" started'
+        self._logger.debug(log)
 
-    @abstractmethod
     def finish(self) -> NoReturn:
         """Actions at finishing IoT application."""
-        msg = f'Plugin "{self.id}" stopped'
-        self._logger.debug(msg)
+        log = f'Plugin "{self.did}" stopped'
+        self._logger.debug(log)
 
     def publish_param(self,
-                      parameter: Parameter,
-                      measure: Optional[Measure]) -> NoReturn:
+                      parameter: Parameter = None,
+                      measure: Measure = None) -> NoReturn:
         """Publish registered parameter to status MQTT topic.
 
         Arguments
         ---------
         parameter
-            Enumerated parameter to be found.
+            Optional enumerated parameter to be found.
         measure
-            Enumerated measure to be found.
+            Optional enumerated measure to be found.
 
         """
         try:
@@ -293,12 +290,12 @@ class Plugin(ABC):
             Category.STATUS,
             record.parameter,
             record.measure)
-        msg = self.get_log(
+        log = self.get_log(
             message,
             Category.STATUS,
             record.parameter,
             record.measure)
-        self._logger.debug(msg)
+        self._logger.debug(log)
         self.mqtt_client.publish(message, topic)
 
     def publish_status(self) -> NoReturn:
@@ -315,13 +312,8 @@ class Plugin(ABC):
         """List of registered parameters."""
         return self._params
 
-    @property
-    def database(self) -> List[PluginData]:
-        """List of cached data records."""
-        return self._database
-
     def _find_record(self,
-                     parameter: Parameter,
+                     parameter: Optional[Parameter],
                      measure: Optional[Measure],
                      dataset: List[PluginData]) -> int:
         """Find record in the device's dataset.
@@ -356,34 +348,37 @@ class Plugin(ABC):
         raise ValueError
 
     def get_param(self,
-                  parameter: Parameter,
-                  measure: Optional[Measure]) -> Any:
+                  parameter: Parameter = None,
+                  measure: Measure = None,
+                  default: Any = None) -> Any:
         """Get parameter value from the device's parameters list.
 
         Arguments
         ---------
         parameter
-            Enumerated parameter to be found.
+            Optional enumerated parameter to be found.
         measure
-            Enumerated measure to be found.
+            Optional enumerated measure to be found.
+        default
+            Default value in case that nothing is found in the dataset.
 
         Returns
         -------
-            Value of a parameter or None.
+            Value of a parameter or default value.
 
         """
         try:
             index = self._find_record(parameter, measure, self.params)
         except ValueError:
-            result = None
+            result = default
         else:
             result = self.params[index].value
         return result
 
     def set_param(self,
                   value: Any,
-                  parameter: Parameter,
-                  measure: Optional[Measure]) -> NoReturn:
+                  parameter: Parameter = None,
+                  measure: Measure = None) -> NoReturn:
         """Set or update parameter with given value.
 
         Arguments
@@ -391,9 +386,9 @@ class Plugin(ABC):
         value
             Value of a parameter to be saved or updated.
         parameter
-            Enumerated parameter to be created or updated.
+            Optional enumerated parameter to be created or updated.
         measure
-            Enumerated measure to be found.
+            Optional enumerated measure to be found.
 
         """
         try:
@@ -402,54 +397,6 @@ class Plugin(ABC):
         except ValueError:
             record = PluginData(parameter, measure, value)
             self.params.append(record)
-
-    def get_value(self,
-                  parameter: Parameter,
-                  measure: Optional[Measure]) -> Any:
-        """Get record value from the device's dataset.
-
-        Arguments
-        ---------
-        parameter
-            Enumerated parameter to be found.
-        measure
-            Enumerated measure to be found.
-
-        Returns
-        -------
-            Value of a data record or None.
-
-        """
-        try:
-            index = self._find_record(parameter, measure, self.database)
-        except ValueError:
-            result = None
-        else:
-            result = self.database[index].value
-        return result
-
-    def set_value(self,
-                  value: Any,
-                  parameter: Parameter,
-                  measure: Optional[Measure]) -> NoReturn:
-        """Set or update record with given value.
-
-        Arguments
-        ---------
-        value
-            Value of a parameter to be saved or updated.
-        parameter
-            Enumerated parameter to be created or updated.
-        measure
-            Enumerated measure to be found.
-
-        """
-        try:
-            index = self._find_record(parameter, measure, self.database)
-            self.database[index].value = value
-        except ValueError:
-            record = PluginData(parameter, measure, value)
-            self.database.append(record)
 
     def process_command(self,
                         value: str,
@@ -462,7 +409,7 @@ class Plugin(ABC):
                        value: str,
                        parameter: Optional[str],
                        measure: Optional[str],
-                       device: object) -> NoReturn:
+                       device: 'Plugin') -> NoReturn:
         """Process status of any device except this one."""
         ...
 
@@ -470,6 +417,6 @@ class Plugin(ABC):
                      value: str,
                      parameter: Optional[str],
                      measure: Optional[str],
-                     device: object) -> NoReturn:
+                     device: 'Plugin') -> NoReturn:
         """Process data from any device except this one."""
         ...
