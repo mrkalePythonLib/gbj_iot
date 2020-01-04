@@ -55,7 +55,7 @@ class Parameter(Enum):
 class Measure(Enum):
     """Enumeration of possible MQTT topi measures."""
     VALUE = 'val'
-    DEFAULT = 'def'
+    DEFAULT = 'dft'
     MINIMUM = 'min'
     MAXIMUM = 'max'
     AVERAGE = 'avg'
