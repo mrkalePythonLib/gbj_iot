@@ -88,6 +88,7 @@ class Plugin(ABC):
         # Device handlers
         self.config = None  # Access to configuration INI file
         self.mqtt_client = None  # Access to MQTT broker
+        self.userdata = None  # Injected user data from received messages
         # Logging
         log = f'Instance of "{self.__class__.__name__}" created: {self.did}'
         self._logger = logging.getLogger(' '.join([__name__, __version__]))
@@ -398,11 +399,19 @@ class Plugin(ABC):
             record = PluginData(parameter, measure, value)
             self.params.append(record)
 
+    def process_own_command(self,
+                            value: str,
+                            parameter: Optional[str],
+                            measure: Optional[str]) -> NoReturn:
+        """Process command for this device only."""
+        ...
+
     def process_command(self,
-                        value: str,
-                        parameter: Optional[str],
-                        measure: Optional[str]) -> NoReturn:
-        """Process command for this device."""
+                       value: str,
+                       parameter: Optional[str],
+                       measure: Optional[str],
+                       device: 'Plugin') -> NoReturn:
+        """Process command for any device except this one."""
         ...
 
     def process_status(self,
