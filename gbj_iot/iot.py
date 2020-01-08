@@ -14,6 +14,7 @@ __email__ = 'libor.gabaj@gmail.com'
 
 # Standard library modules
 import logging
+from os import path
 from abc import ABC, abstractmethod
 from enum import Enum
 from dataclasses import dataclass
@@ -21,7 +22,7 @@ from typing import Optional, Any, NoReturn, List
 
 
 ###############################################################################
-# Enumeration and parameter classes
+# Enumerations utilized by all plugins
 ###############################################################################
 class Status(Enum):
     """Enumeration of possible status tokens for MQTT topics."""
@@ -48,10 +49,6 @@ class Category(Enum):
     DATA = 'data'
 
 
-class Parameter(Enum):
-    """Enumeration of expected MQTT topic parameters."""
-    ...
-
 class Measure(Enum):
     """Enumeration of possible MQTT topi measures."""
     VALUE = 'val'
@@ -69,7 +66,7 @@ class Measure(Enum):
 @dataclass
 class PluginData:
     """Plugin parameter record definition."""
-    parameter: Parameter = None
+    parameter: Enum = None
     measure: Measure = None
     value: Any = None
 
@@ -105,99 +102,30 @@ class Plugin(ABC):
     @property
     @abstractmethod
     def did(self) -> str:
-        """Identifier of the pluging and the root MQTT topic fragment."""
+        """Identifier of the plugin and the root MQTT topic fragment."""
         ...
 
-    def check_category(self, category: Category) -> str:
-        """Check validity of the category enumeration member and return
-        its value.
-
-        Returns
-        -------
-            Category name for MQTT topic.
-
-        Raises
-        -------
-        ValueError
-            Input string is not an enumeration key.
-
-        """
-        try:
-            if isinstance(category, Category):
-                category = category.value
-            else:
-                category = Category[category].value
-            return category
-        except KeyError:
-            log = f'Unknown MQTT topic {category=}'
-            self._logger.error(log)
-            raise ValueError(log)
-
-    def check_parameter(self, parameter: Parameter) -> str:
-        """Check validity of the parameter enumeration member and return
-        its value.
-
-        Returns
-        -------
-            Parameter name for MQTT topic.
-
-        Raises
-        -------
-        ValueError
-            Input string is not an enumeration key.
-
-        """
-        try:
-            if isinstance(parameter, Parameter):
-                parameter = parameter.value
-            else:
-                parameter = Parameter[parameter].value
-            return parameter
-        except KeyError:
-            log = f'Unknown MQTT topic {parameter=}'
-            self._logger.error(log)
-            raise ValueError(log)
-
-    def check_measure(self, measure: Measure) -> str:
-        """Check validity of the measure enumeration member and return
-        its value.
-
-        Returns
-        -------
-            Measure name for MQTT topic.
-
-        Raises
-        -------
-        ValueError
-            Input string is not an enumeration key.
-
-        """
-        try:
-            if isinstance(measure, Measure):
-                measure = measure.value
-            else:
-                measure = Measure[measure].value
-            return measure
-        except KeyError:
-            log = f'Unknown MQTT topic {measure=}'
-            self._logger.error(log)
-            raise ValueError(log)
+    def get_did(self, name: str) -> str:
+        """Compose plugin identifier from provided module name."""
+        name = path.splitext(name)[0]
+        device_id = name.split('_')[1]
+        return device_id
 
     def get_topic(
             self,
             category: Category,
-            parameter: Parameter = None,
+            parameter: Enum = None,
             measure: Measure = None) -> str:
         """Compose MQTT topic name from prescribed topic parts.
 
         Arguments
         ---------
         category
-            Enumerated category of a MQTT topic.
+            Enumerated category of an MQTT topic.
         parameter
-            Optional enumerated parameter, which values is
-            transmitted by the MQTT topic. It is usually a name of a physical
-            unit or an operational parameter.
+            Optional enumerated parameter, which value is transmitted
+            by an MQTT topic. It is usually a name of a physical unit
+            or an operational parameter.
         measure
             Optional enumerated measure of an aspect related to tranmitted
             value. It is usually a statistical measure like minimum, maximum,
@@ -205,12 +133,12 @@ class Plugin(ABC):
 
         """
         topic = [self.did]
-        topic.append(self.check_category(category))
+        topic.append(category.value)
         # Optional topic parts
         if parameter:
-            topic.append(self.check_parameter(parameter))
+            topic.append(parameter.value)
         if measure:
-            topic.append(self.check_measure(measure))
+            topic.append(measure.value)
         # Compose topic
         topic_name = self.Separator.TOPIC.value.join(topic)
         return topic_name
@@ -219,7 +147,7 @@ class Plugin(ABC):
             self,
             message: str,
             category: Category,
-            parameter: str = None,
+            parameter: Enum = None,
             measure: Measure = None) -> str:
         """Compose log record as a substitution for MQTT topic and message.
 
@@ -230,9 +158,9 @@ class Plugin(ABC):
         category
             Enumerated category of a MQTT topic.
         parameter
-            Optional and arbitrary name of a parameter, which values is
-            transmitted by the MQTT topic. It is usually a name of a physical
-            unit or an operational parameter.
+            Optional enumerated parameter, which value is transmitted
+            by an MQTT topic. It is usually a name of a physical unit
+            or an operational parameter.
         measure
             Optional enumerated measure of an aspect related to tranmitted
             value. It is usually a statistical measure like minimum, maximum,
@@ -242,10 +170,10 @@ class Plugin(ABC):
         category = category.name
         log = f'{category}'
         if parameter:
-            parameter = self.check_parameter(parameter)
+            parameter = parameter.value
             log = f'{log}: {parameter=}'
         if measure:
-            measure = self.check_measure(measure)
+            measure = measure.value
             log = f'{log}, {measure=}'
         log = f'{log}: {message}'
         return log
@@ -269,7 +197,7 @@ class Plugin(ABC):
         self._logger.debug(log)
 
     def publish_param(self,
-                      parameter: Parameter = None,
+                      parameter: Enum = None,
                       measure: Measure = None) -> NoReturn:
         """Publish registered parameter to status MQTT topic.
 
@@ -314,7 +242,7 @@ class Plugin(ABC):
         return self._params
 
     def _find_record(self,
-                     parameter: Optional[Parameter],
+                     parameter: Optional[Enum],
                      measure: Optional[Measure],
                      dataset: List[PluginData]) -> int:
         """Find record in the device's dataset.
@@ -334,22 +262,22 @@ class Plugin(ABC):
 
         Raises
         -------
+        AttributeError
+            Argument parameter and/or measure is not an enumeration, so that
+            they have no attribure value.
         ValueError
-            Record not found or given unknown measure.
+            No record found.
 
         """
-        if parameter is not None:
-            self.check_parameter(parameter)
-        if measure is not None:
-            self.check_measure(measure)
         for index, record in enumerate(dataset):
-            if parameter == record.parameter \
-                    and (measure is None or measure == record.measure):
+            if parameter.value == record.parameter \
+                    and (measure.value is None \
+                         or measure.value == record.measure):
                 return index
         raise ValueError
 
     def get_param(self,
-                  parameter: Parameter = None,
+                  parameter: Enum = None,
                   measure: Measure = None,
                   default: Any = None) -> Any:
         """Get parameter value from the device's parameters list.
@@ -378,7 +306,7 @@ class Plugin(ABC):
 
     def set_param(self,
                   value: Any,
-                  parameter: Parameter = None,
+                  parameter: Enum = None,
                   measure: Measure = None) -> NoReturn:
         """Set or update parameter with given value.
 
@@ -403,7 +331,20 @@ class Plugin(ABC):
                             value: str,
                             parameter: Optional[str],
                             measure: Optional[str]) -> NoReturn:
-        """Process command for this device only."""
+        """Process command for this device only.
+
+        Arguments
+        ---------
+        value
+            Payload from an MQTT message.
+        parameter
+            Parameter taken from an MQTT topic corresponding to some item value
+            from Parameter enumeration.
+        measure
+            Measure taken from an MQTT topic corresponding to some item value
+            from Measure enumeration.
+
+        """
         ...
 
     def process_command(self,
@@ -411,7 +352,22 @@ class Plugin(ABC):
                        parameter: Optional[str],
                        measure: Optional[str],
                        device: 'Plugin') -> NoReturn:
-        """Process command for any device except this one."""
+        """Process command for any device except this one.
+
+        Arguments
+        ---------
+        value
+            Payload from an MQTT message.
+        parameter
+            Parameter taken from an MQTT topic corresponding to some item value
+            from Parameter enumeration.
+        measure
+            Measure taken from an MQTT topic corresponding to some item value
+            from Measure enumeration.
+        device
+            Object of a sourcing device (plugin), which sent an MQTT message.
+
+        """
         ...
 
     def process_status(self,
@@ -419,7 +375,22 @@ class Plugin(ABC):
                        parameter: Optional[str],
                        measure: Optional[str],
                        device: 'Plugin') -> NoReturn:
-        """Process status of any device except this one."""
+        """Process status of any device except this one.
+
+        Arguments
+        ---------
+        value
+            Payload from an MQTT message.
+        parameter
+            Parameter taken from an MQTT topic corresponding to some item value
+            from Parameter enumeration.
+        measure
+            Measure taken from an MQTT topic corresponding to some item value
+            from Measure enumeration.
+        device
+            Object of a sourcing device (plugin), which sent an MQTT message.
+
+        """
         ...
 
     def process_data(self,
@@ -427,5 +398,20 @@ class Plugin(ABC):
                      parameter: Optional[str],
                      measure: Optional[str],
                      device: 'Plugin') -> NoReturn:
-        """Process data from any device except this one."""
+        """Process data from any device except this one.
+
+        Arguments
+        ---------
+        value
+            Payload from an MQTT message.
+        parameter
+            Parameter taken from an MQTT topic corresponding to some item value
+            from Parameter enumeration.
+        measure
+            Measure taken from an MQTT topic corresponding to some item value
+            from Measure enumeration.
+        device
+            Object of a sourcing device (plugin), which sent an MQTT message.
+
+        """
         ...
