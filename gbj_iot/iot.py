@@ -270,9 +270,7 @@ class Plugin(ABC):
 
         """
         for index, record in enumerate(dataset):
-            if parameter.value == record.parameter \
-                    and (measure.value is None \
-                         or measure.value == record.measure):
+            if parameter == record.parameter and measure == record.measure:
                 return index
         raise ValueError
 
@@ -348,10 +346,10 @@ class Plugin(ABC):
         ...
 
     def process_command(self,
-                       value: str,
-                       parameter: Optional[str],
-                       measure: Optional[str],
-                       device: 'Plugin') -> NoReturn:
+                        value: str,
+                        parameter: Optional[str],
+                        measure: Optional[str],
+                        device: 'Plugin') -> NoReturn:
         """Process command for any device except this one.
 
         Arguments
