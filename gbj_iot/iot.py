@@ -130,7 +130,7 @@ def get_record(parameter: Optional[Enum],
         Index of found record in the list of a dataset.
 
     Raises
-    -------
+    ------
     AttributeError
         Argument parameter and/or measure is not an enumeration, so that
         they have no attribure value.
