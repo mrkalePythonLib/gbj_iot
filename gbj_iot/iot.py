@@ -50,7 +50,7 @@ class Category(Enum):
 
 
 class Measure(Enum):
-    """Enumeration of possible MQTT topi measures."""
+    """Enumeration of possible MQTT topic measures."""
     VALUE = 'val'
     DEFAULT = 'dft'
     MINIMUM = 'min'
@@ -58,6 +58,7 @@ class Measure(Enum):
     AVERAGE = 'avg'
     PERCENTILE = 'ptl'
     PERCENTAGE = 'perc'
+    GPIO = 'pin'
 
 
 @dataclass
