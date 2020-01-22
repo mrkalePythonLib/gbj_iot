@@ -160,6 +160,7 @@ class Plugin(ABC):
         # Private attributes
         self._params: [PluginData] = []  # Status (configuration) parameters
         # Device handlers
+        self.devices = {}  # List of processed proxy devices
         self.config = None  # Access to configuration INI file
         self.mqtt_client = None  # Access to MQTT broker
         self.userdata = None  # Injected user data from received messages
